@@ -29,7 +29,7 @@ public class DSMSImplement extends UnicastRemoteObject implements DSMSInteface {
 
     @Override
     public boolean addItem(String managerID, String itemID, String itemName, int quantity, int price) {
-
+        //Todo: check managerID
         if(this.store.containsKey(itemID)) {
             String[] info = this.store.get(itemID).split(",");
             info[1] = Integer.toString(Integer.parseInt(info[1]) + quantity);
@@ -50,7 +50,7 @@ public class DSMSImplement extends UnicastRemoteObject implements DSMSInteface {
 
     @Override
     public boolean removeItem(String managerID, String itemID, int quantity) {
-        return false;
+        return true;
     }
 
     @Override
