@@ -7,9 +7,10 @@ import java.rmi.registry.Registry;
 
 public class ONServer {
     public static void main(String[] args) throws IOException, AlreadyBoundException {
-        DSMSImplement object = new DSMSImplement(Province.BC);
-        Registry registry = LocateRegistry.createRegistry(1234);
-        registry.bind("BC_Server", object);
+        DSMSImplement server = new DSMSImplement(Province.ON,2222);
+        Registry registry = LocateRegistry.createRegistry(1111);
+        registry.bind("ON_Server", server);
         System.out.println("BC_Server is started");
+        server.log("QC_Server is started");
     }
 }
