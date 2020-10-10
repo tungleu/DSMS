@@ -1,21 +1,15 @@
-package servers;
-import clients.customerClient;
-import clients.managerClient;
+package DSMS;
+import common.Province;
 
-import java.beans.Customizer;
 import java.net.*;
-import java.rmi.AlreadyBoundException;
 import java.rmi.NotBoundException;
-import java.rmi.Remote;
 import java.rmi.RemoteException;
-import java.rmi.registry.LocateRegistry;
-import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
-import java.text.SimpleDateFormat;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.io.*;
+import java.util.logging.FileHandler;
+import java.util.logging.Logger;
+import java.util.logging.SimpleFormatter;
 
 
 public class DSMSImplement extends UnicastRemoteObject implements DSMSInteface {
@@ -23,40 +17,67 @@ public class DSMSImplement extends UnicastRemoteObject implements DSMSInteface {
     private Map<String, String> store = new HashMap<String, String>();
     private Map<String, PriorityQueue<String>> waitlist = new HashMap<String, PriorityQueue<String>>();
     private Province province;
-    private PrintWriter pw;
+    private Logger logger = null;
     private HashMap<String, customerClient> customerClients = new HashMap<String, customerClient>();
     private HashMap<String, managerClient> managerClients = new HashMap<String, managerClient>();
     private HashMap<String, Integer> portMap = new HashMap<String, Integer>();
     private ArrayList<String> purchaseLog = new ArrayList<String>();
-    protected DSMSImplement(Province province, int port) throws IOException {
+    public DSMSImplement(Province province) throws IOException {
         super();
         this.province = province;
-        File file = new File("src/logs/ServerLogs/" + this.province + "_Server.log");
-        FileWriter fw = new FileWriter(file);
-        this.pw = new PrintWriter(fw);
         this.portMap.put("QC", 1111);
         this.portMap.put("ON", 2222);
         this.portMap.put("BC", 3333);
-        this.receive();
+        this.logger = this.startLogger();
+        logger.info("Server " + this.province.toString()+ " has started");
     }
 
-    public void log(String message) {
-        this.pw.println(helper.current_time() + ": " + message);
+    public Logger startLogger() {
+        Logger logger = Logger.getLogger("ServerLog");
+        FileHandler fh;
+        try {
+            fh = new FileHandler("src/logs/ServerLogs/"+this.province.toString()+"_Server.log");
+            logger.addHandler(fh);
+            SimpleFormatter formatter = new SimpleFormatter();
+            fh.setFormatter(formatter);
+
+        } catch (SecurityException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return logger;
     }
 
     @Override
-    public boolean addItem(String managerID, String itemID, String itemName, int quantity, int price) throws RemoteException  {
+    public boolean addItem(String managerID, String itemID, String itemName, int quantity, int price) throws IOException, NotBoundException {
         if (this.store.containsKey(itemID)) {
             String[] info = this.store.get(itemID).split(",");
             info[1] = Integer.toString(Integer.parseInt(info[1]) + quantity);
             store.replace(itemID, String.join(",", info));
-            this.log("Manager with id: " + managerID + "updated store info on this item:" + itemID);
-            return true;
+            logger.info("Manager with id: " + managerID + " updated store info on this item:" + itemID);
+
         } else {
             store.put(itemID, itemName + "," + quantity + "," + price);
-            this.log("Manager with id:" + managerID + "added new item into the store:" + itemID);
-            return true;
+            logger.info("Manager with id: " + managerID + " added new item into the store:" + itemID);
+
         }
+        if(this.waitlist.containsKey(itemID)){
+            PriorityQueue<String> queue = this.waitlist.get(itemID);
+            for(String id : queue){
+                if(id.startsWith(this.province.toString())){
+                    this.purchaseItem(id,itemID,new Date());
+                }
+                else{
+                    int port = this.portMap.get(id.substring(0,2));
+                    String message = "PURCHASE_2,"+itemID+","+new Date().toString();
+                    this.sendMessage(port,message);
+                }
+
+            }
+
+        }
+        return true;
 
     }
 
@@ -68,22 +89,22 @@ public class DSMSImplement extends UnicastRemoteObject implements DSMSInteface {
             info[1] = Integer.toString(Integer.parseInt(info[1]) + quantity);
             if (Integer.parseInt(info[1]) <= 0) {
                 this.store.remove(itemID);
-                this.log("Manager with id:" + managerID + "removed this item out of the store:" + itemID);
+                logger.info("Manager with id: " + managerID + " removed this item out of the store:" + itemID);
             } else {
                 store.replace(itemID, String.join(",", info));
-                this.log("Manager with id:" + managerID + "decreased quantity of this item out of the store:" + itemID);
+                logger.info("Manager with id: " + managerID + " decreased quantity of this item out of the store:" + itemID);
             }
             return true;
         } else {
             System.out.println("The given item ID doesn't exist");
-            this.log("Manager with id:" + managerID + "gave non existent itemID");
+            logger.info("Manager with id: " + managerID + " gave non existent itemID");
             return false;
         }
     }
 
     @Override
     public String listItemAvailability(String managerID) throws RemoteException {
-        this.log("Manager with id: " + managerID + "requested for listItemAvailability()");
+        logger.info("Manager with id: " + managerID + " requested for listItemAvailability()");
         String result = "";
         for (Map.Entry<String,String> entry: this.store.entrySet()){
             result += entry.getKey() + ":" +entry.getValue() +"\n";
@@ -94,19 +115,30 @@ public class DSMSImplement extends UnicastRemoteObject implements DSMSInteface {
     @Override
     public String purchaseItem(String customerID, String itemID, Date dateOfPurchase) throws RemoteException,IOException, NotBoundException {
         String serverName = itemID.substring(0,2);
+        customerClient customer = this.customerClients.get(customerID);
         if (serverName.equals(this.province.toString())) {
-            this.log("Customer with id: " + customerID + "requested to purchase an item in local shop");
+            logger.info("Customer with id: " + customerID + " requested to purchase an item in local shop");
             return this.purchaseLocalItem(customerID, itemID, dateOfPurchase);
         } else {
-            this.log("Customer with id: " + customerID + "requested to purchase an item in "+serverName + " store");
-            this.log("Sending UDP mesasge to "+serverName +" store");
-            String message = "PURCHASE, "+ ","+ customerID +","+ customerClients.get(customerID).getBudget()+"," + dateOfPurchase.toString() ;
-            return this.sendMessage(this.portMap.get(itemID.substring(0,2)),message);
+            logger.info("Customer with id: " + customerID + " requested to purchase an item in "+serverName + " store");
+            logger.info("Sending UDP mesasge to "+serverName +" store");
+            String message = "PURCHASE"+ ","+ customerID +","+ customer.getBudget()+","+ itemID +"," + dateOfPurchase.toString() ;
+            String result = this.sendMessage(this.portMap.get(itemID.substring(0,2)),message);
+            if(result.startsWith("SUCCESSFUL")){
+                logger.info(result.split(",")[1]);
+                String budgetReturn = result.split(",")[1].trim();
+                int returnBudget = Integer.parseInt(budgetReturn);
+                customer.setBudget(returnBudget);
+                return("SUCCESSFUL");
+            }
+            else{
+                return result;
+            }
         }
     }
 
 
-    @Override
+
     public String purchaseLocalItem(String customerID, String itemID, Date dateOfPurchase) throws RemoteException {
         customerClient customer = customerClients.get(customerID);
         if (this.store.containsKey(itemID)) {
@@ -117,16 +149,16 @@ public class DSMSImplement extends UnicastRemoteObject implements DSMSInteface {
                     info[1] = Integer.toString(Integer.parseInt(info[1]) -1);
                     store.replace(itemID, String.join(",", info));
                     this.purchaseLog.add(itemID+","+customerID+","+dateOfPurchase.toString());
-                    this.log("Customer with id: " + customerID + "purchased successfully");
+                    logger.info("Customer with id: " + customerID + " purchased successfully");
                     return "SUCCESSFUL";
                 }
                 else{
-                    this.log("Customer with id: " + customerID + "is out of budget");
+                    logger.info("Customer with id: " + customerID + " is out of budget");
                     return "OUT OF BUDGET";
                 }
             }
             else{
-                this.log("Customer with id: " + customerID + "is out of budget");
+                logger.info("Customer with id: " + customerID + " is out of budget");
                 return "OUT OF STOCK";
             }
         } else {
@@ -135,7 +167,7 @@ public class DSMSImplement extends UnicastRemoteObject implements DSMSInteface {
         }
     }
 
-    @Override
+
     public String purchaseFromOutside(String customerID, int budget, String itemID, Date dateOfPurchase) throws RemoteException {
         if (this.store.containsKey(itemID)) {
             String[] info = this.store.get(itemID).split(",");
@@ -145,7 +177,7 @@ public class DSMSImplement extends UnicastRemoteObject implements DSMSInteface {
                     info[1] = Integer.toString(Integer.parseInt(info[1]) -1);
                     store.replace(itemID, String.join(",", info));
                     this.purchaseLog.add(itemID+","+customerID+","+dateOfPurchase.toString());
-                    return "SUCCESSFUL, "+returnBudget;
+                    return "SUCCESSFUL,"+returnBudget;
                 }
                 else{
                     return "OUT OF BUDGET";
@@ -160,7 +192,7 @@ public class DSMSImplement extends UnicastRemoteObject implements DSMSInteface {
         }
     }
 
-    @Override
+
     public String returnItemfromOutside(String customerID, String itemID, Date dateOfReturn) {
         for(String log : this.purchaseLog){
             String[] logParams = log.split(",");
@@ -174,7 +206,7 @@ public class DSMSImplement extends UnicastRemoteObject implements DSMSInteface {
                     String[] info = this.store.get(itemID).split(",");
                     info[1] = Integer.toString(Integer.parseInt(info[1]) +1);
                     store.replace(itemID, String.join(",", info));
-                    this.log("Customer with id: " + customerID + "returned this item:" + itemID);
+                    logger.info("Customer with id: " + customerID + " returned this item:" + itemID);
                     String price = this.store.get(itemID).split(",")[1];
                     return "TRUE"+ price;
                 }
@@ -202,7 +234,7 @@ public class DSMSImplement extends UnicastRemoteObject implements DSMSInteface {
             queue.add(customerID);
             this.waitlist.put(itemID, queue);
         }
-        this.log("Update priority queue");
+        logger.info("Update priority queue");
     }
 
     @Override
@@ -214,8 +246,11 @@ public class DSMSImplement extends UnicastRemoteObject implements DSMSInteface {
                 continue;
             }
             String message = "ITEM_INFO," + itemName;
-            this.log("Server send UDP request for Item info");
+            logger.info("Server send UDP request for Item info");
             result = result +";"+this.sendMessage(entry.getValue(),message);
+            if(result.equals("")){
+                return "Item name not found";
+            }
         }
         return result;
     }
@@ -237,7 +272,7 @@ public class DSMSImplement extends UnicastRemoteObject implements DSMSInteface {
                         info[1] = Integer.toString(Integer.parseInt(info[1]) +1);
                         store.replace(itemID, String.join(",", info));
                         customer.setBudget(customer.getBudget()+Integer.parseInt(info[2]));
-                        this.log("Customer with id: " + customerID + "returned this item:" + itemID);
+                        logger.info("Customer with id: " + customerID + "returned this item:" + itemID);
                         return true;
                     }
                 }
@@ -245,14 +280,14 @@ public class DSMSImplement extends UnicastRemoteObject implements DSMSInteface {
         }
         else{
             int port = this.portMap.get(itemID.substring(0,2));
-            this.log("Sending UDP request to return Item");
+            logger.info("Sending UDP request to return Item");
             String reply = this.sendMessage(port,"RETURN,"+itemID+","+customerID+","+dateOfReturn.toString());
             if(reply.startsWith("FALSE")){
                 return false;
             }
             else if(reply.startsWith("TRUE")){
                 customer.setBudget(customer.getBudget()+Integer.parseInt(reply.split(",")[2]));
-                this.log("Customer with id: " + customerID + "returned this item:" + itemID);
+                logger.info("Customer with id: " + customerID + " returned this item:" + itemID);
                 return true;
             }
         }
@@ -275,15 +310,17 @@ public class DSMSImplement extends UnicastRemoteObject implements DSMSInteface {
 
 
     @Override
-    public void addCustomerClient(customerClient customerClient) throws RemoteException {
-        this.customerClients.put(customerClient.getID(), customerClient);
+    public void addCustomerClient(Province province, String id) throws Exception {
+        customerClient customer = new customerClient(province,id);
+        this.customerClients.put(customer.getID(), customer);
     }
 
 
 
     @Override
-    public void addManagerClient(managerClient managerClient) throws RemoteException {
-        this.managerClients.put(managerClient.getID(), managerClient);
+    public void addManagerClient(Province province, String id) throws Exception {
+        managerClient manager = new managerClient(province,id);
+        this.managerClients.put(manager.getID(), manager);
     }
 
 
@@ -324,7 +361,7 @@ public class DSMSImplement extends UnicastRemoteObject implements DSMSInteface {
         try {
             aSocket = new DatagramSocket(this.portMap.get(this.province.toString()));
             byte[] buffer = new byte[1000];
-            System.out.println("Server 8888 Started............");
+            System.out.println("UDP Server for "+this.province.toString() + " has started listening............");
             String replyMessage = null;
             while (true) {
                 DatagramPacket request = new DatagramPacket(buffer, buffer.length);
@@ -350,6 +387,12 @@ public class DSMSImplement extends UnicastRemoteObject implements DSMSInteface {
                     Date dateOfReturn = new Date(requestParam[3]);
                     replyMessage = this.returnItemfromOutside(customerID,itemID,dateOfReturn);
                 }
+                else if(requestParam[0].equals("PURCHASE_2")){
+                    String customerID = requestParam[1];
+                    String itemID = requestParam[2];
+                    Date date = new Date(requestParam[3]);
+                    replyMessage = this.purchaseItem(customerID,itemID, date);
+                }
                 DatagramPacket reply = new DatagramPacket(replyMessage.getBytes(), replyMessage.length(), request.getAddress(),
                         request.getPort());
                 aSocket.send(reply);
@@ -358,6 +401,8 @@ public class DSMSImplement extends UnicastRemoteObject implements DSMSInteface {
             System.out.println("Socket: " + e.getMessage());
         } catch (IOException e) {
             System.out.println("IO: " + e.getMessage());
+        } catch (NotBoundException e) {
+            e.printStackTrace();
         } finally {
             if (aSocket != null)
                 aSocket.close();

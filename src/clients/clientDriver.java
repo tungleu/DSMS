@@ -1,8 +1,9 @@
 package clients;
 
-import servers.Province;
-import java.io.IOException;
-import java.rmi.RemoteException;
+import common.Province;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.Scanner;
 
 public class clientDriver {
@@ -26,7 +27,7 @@ public class clientDriver {
         System.out.println("1. Customer client");
         System.out.println("2. Manager client");
         int option = scanner.nextInt();
-        while(option != 1 || option != 2){
+        while(option != 1 && option != 2){
             System.out.println("Please choose valid option");
             option = scanner.nextInt();
         }
@@ -34,23 +35,93 @@ public class clientDriver {
         String IDNumber = scanner.next();
         String clientID = null;
         if(option == 1){
-            clientID = province.toString() + "U" + clientID;
-            customerClient customer = new customerClient(province, clientID);
+            clientID = province.toString() + "U" + IDNumber;
+            System.out.println("Your ID is :"+ clientID);
+            Customer customer = new Customer(clientID,province);
+            int customerOption;
+            String itemID;
+            String inputDate;
+            String itemName;
+            DateFormat format = new SimpleDateFormat("MMMM d, yyyy");
+            Date date = null;
             while(true){
                 System.out.println("Please choose your action ");
                 System.out.println("1.Purchase Item");
                 System.out.println("2. Find Item ");
                 System.out.println("3. Return Item ");
+                customerOption = scanner.nextInt();
+                switch(customerOption){
+                    case 1:
+                        System.out.println("PURCHASE SELECTED");
+                        System.out.println("Enter item ID");
+                        itemID = scanner.next();
+                        System.out.println("Enter the date of purchase in this form: MMMM d , yyyy ");
+                        inputDate = scanner.next();
+                        date = format.parse(inputDate);
+                        customer.purchaseItem(itemID,date);
+                        break;
+                    case 2:
+                        System.out.println("FIND ITEM SELECTED");
+                        itemName = scanner.next();
+                        customer.findItem(itemName);
+                        break;
+                    case 3:
+                        System.out.println("RETURN ITEM SELECTED");
+                        System.out.println("Enter item ID");
+                        itemID = scanner.next();
+                        System.out.println("Enter the date of return in this form: MMMM d , yyyy ");
+                        inputDate = scanner.next();
+                        date = format.parse(inputDate);
+                        customer.returnItem(itemID,date);
+                        break;
+                }
             }
+
+
         }
         else{
-            clientID = province.toString() + "M" + clientID;
-            managerClient managerClient = new managerClient(province);
+            clientID = province.toString() + "M" + IDNumber;
+            System.out.println("Your ID is :"+ clientID);
+            Manager manager = new Manager(clientID,province);
+            int managerOption;
+            String itemID;
+            String inputDate;
+            String itemName;
+            int price, quantity;
+            DateFormat format = new SimpleDateFormat("MMMM d, yyyy");
+            Date date = null;
             while(true){
                 System.out.println("Please choose your action ");
                 System.out.println("1. Add item ");
                 System.out.println("2, Remove item ");
                 System.out.println("3. List item availability");
+                managerOption = scanner.nextInt();
+                switch(managerOption){
+                    case 1:
+                        System.out.println("ADD ITEM SELECTED");
+                        System.out.println("Enter item ID");
+                        itemID = scanner.next();
+                        System.out.println("Enter item name");
+                        itemName = scanner.next();
+                        System.out.println("Enter price");
+                        price = scanner.nextInt();
+                        System.out.println("Enter quantity");
+                        quantity = scanner.nextInt();
+                        manager.addItem(itemID,itemName,quantity, price);
+                        break;
+                    case 2:
+                        System.out.println("REMOVE ITEM SELECTED");
+                        System.out.println("Enter item ID");
+                        itemID = scanner.next();
+                        System.out.println("Enter quantity");
+                        quantity = scanner.nextInt();
+                        manager.removeItem(itemID,quantity);
+                        break;
+                    case 3:
+                        System.out.println("LIST ITEM AVAILABILITY SELECTED");
+                        manager.listItemAvailability();
+                        break;
+                }
             }
         }
     }

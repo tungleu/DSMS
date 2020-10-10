@@ -1,4 +1,4 @@
-package servers;
+package common;
 
 public enum Province
 {
