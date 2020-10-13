@@ -66,6 +66,9 @@ public class Customer {
             System.out.println("The given item id does not exist");
 
         }
+        else{
+            System.out.println(result);
+        }
 
     }
     public synchronized void findItem (String itemName) throws IOException, NotBoundException {

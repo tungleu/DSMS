@@ -43,7 +43,7 @@ public class clientDriver {
             String inputDate;
             String itemName;
             DateFormat format = new SimpleDateFormat("MMMM d, yyyy");
-            Date date = null;
+            Date date;
             while(true){
                 System.out.println("Please choose your action ");
                 System.out.println("1.Purchase Item");
@@ -55,13 +55,15 @@ public class clientDriver {
                         System.out.println("PURCHASE SELECTED");
                         System.out.println("Enter item ID");
                         itemID = scanner.next();
-                        System.out.println("Enter the date of purchase in this form: MMMM d , yyyy ");
-                        inputDate = scanner.next();
+                        scanner.nextLine();
+                        System.out.println("Enter the date of purchase in this form: MMMM dd, yyyy ");
+                        inputDate = scanner.nextLine();
                         date = format.parse(inputDate);
                         customer.purchaseItem(itemID,date);
                         break;
                     case 2:
                         System.out.println("FIND ITEM SELECTED");
+                        System.out.println("Enter the name of item:");
                         itemName = scanner.next();
                         customer.findItem(itemName);
                         break;
@@ -69,8 +71,9 @@ public class clientDriver {
                         System.out.println("RETURN ITEM SELECTED");
                         System.out.println("Enter item ID");
                         itemID = scanner.next();
-                        System.out.println("Enter the date of return in this form: MMMM d , yyyy ");
-                        inputDate = scanner.next();
+                        scanner.nextLine();
+                        System.out.println("Enter the date of return in this form: MMMM dd, yyyy ");
+                        inputDate = scanner.nextLine();
                         date = format.parse(inputDate);
                         customer.returnItem(itemID,date);
                         break;

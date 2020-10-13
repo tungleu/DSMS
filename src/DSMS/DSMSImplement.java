@@ -86,7 +86,7 @@ public class DSMSImplement extends UnicastRemoteObject implements DSMSInteface {
     public boolean removeItem(String managerID, String itemID, int quantity) throws RemoteException {
         if (this.store.containsKey(itemID)) {
             String[] info = this.store.get(itemID).split(",");
-            info[1] = Integer.toString(Integer.parseInt(info[1]) + quantity);
+            info[1] = Integer.toString(Integer.parseInt(info[1]) - quantity);
             if (Integer.parseInt(info[1]) <= 0) {
                 this.store.remove(itemID);
                 logger.info("Manager with id: " + managerID + " removed this item out of the store:" + itemID);
@@ -120,19 +120,23 @@ public class DSMSImplement extends UnicastRemoteObject implements DSMSInteface {
             logger.info("Customer with id: " + customerID + " requested to purchase an item in local shop");
             return this.purchaseLocalItem(customerID, itemID, dateOfPurchase);
         } else {
-            logger.info("Customer with id: " + customerID + " requested to purchase an item in "+serverName + " store");
-            logger.info("Sending UDP mesasge to "+serverName +" store");
-            String message = "PURCHASE"+ ","+ customerID +","+ customer.getBudget()+","+ itemID +"," + dateOfPurchase.toString() ;
-            String result = this.sendMessage(this.portMap.get(itemID.substring(0,2)),message);
-            if(result.startsWith("SUCCESSFUL")){
-                logger.info(result.split(",")[1]);
-                String budgetReturn = result.split(",")[1].trim();
-                int returnBudget = Integer.parseInt(budgetReturn);
-                customer.setBudget(returnBudget);
-                return("SUCCESSFUL");
+            if (customer.checkEligible(serverName)){
+                logger.info("Customer with id: " + customerID + " requested to purchase an item in " + serverName + " store");
+                logger.info("Sending UDP mesasge to " + serverName + " store");
+                String message = "PURCHASE" + "," + customerID + "," + customer.getBudget() + "," + itemID + "," + dateOfPurchase.toString();
+                String result = this.sendMessage(this.portMap.get(itemID.substring(0, 2)), message);
+                if (result.startsWith("SUCCESSFUL")) {
+                    String budgetReturn = result.split(",")[1].trim();
+                    int returnBudget = Integer.parseInt(budgetReturn);
+                    customer.setBudget(returnBudget);
+                    customer.setElgibility(serverName,false);
+                    return ("SUCCESSFUL");
+                } else {
+                    return result;
+                }
             }
             else{
-                return result;
+                return "CUSTOMER NO LONGER ELIGIBLE TO PURCHASE FROM "+ serverName + " STORE" ;
             }
         }
     }
@@ -300,7 +304,7 @@ public class DSMSImplement extends UnicastRemoteObject implements DSMSInteface {
         String result = "";
         for (Map.Entry<String, String> entry : this.store.entrySet()) {
             if (itemName.equals(entry.getValue().split(",")[0])) {
-                result = result + ", " + entry.getKey();
+                 return entry.getKey();
             }
         }
         return result;
